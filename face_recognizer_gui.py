@@ -4,10 +4,11 @@
     人脸特征提取、人脸识别等功能、GUI界面,
     要求每个功能可在画面进行实时展示的关闭
 时间: 2024/09/27 - 2024/10/03
-作者: 饶欣瑶/Redal
+作者: Redal
 """
 import os
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog
 import numpy as np
 import cv2 
@@ -50,6 +51,8 @@ class FaceRecognitionAPP(tk.Frame):
         self.toggle_face_alignment_crop_image_active = False  # 控制是否进行对齐、裁剪出人脸
         self.toggle_face_liveness_detection_active = False  # 控制是否进行活体检测
         self.face_recognition_active = False  # 控制是否进行人脸识别
+        # self.toggle_show_multi_keypoints_active = False  # 控制是否显示多种人脸关键点
+        # self.toggle_dlib_face_recognize_active = False  # 控制是否使用dlib人脸识别
         self.skip_frame_num , self.face_recognized_name= 0, ''  # 控制跳帧数
         self.eye_count_framenum,self.mouth_count_framenum, self.eye_num,self.mouth_num= 0,0,0,0
         self.facial_feature_extraction_name,self.face_embedding = [],[]
@@ -69,6 +72,7 @@ class FaceRecognitionAPP(tk.Frame):
             static_image_mode = False, max_num_faces= 10,
             refine_landmarks=True, min_detection_confidence=0.3,
             min_tracking_confidence=0.3)
+        self.font = ImageFont.truetype(r'font/联想小新潮酷体.ttf', 18, encoding="utf-8")
 
     def create_buttons(self):
         x0,y0=25,280 # 设置初始的按键(x,y)位置
@@ -82,6 +86,8 @@ class FaceRecognitionAPP(tk.Frame):
             self.toggle_face_alignment_crop_image_active = False
             self.toggle_face_liveness_detection_active = False
             self.face_recognition_active = False
+            self.toggle_show_multi_keypoints_active = False
+            self.toggle_dlib_face_recognize_active = False
             text='                   \n'*4
             self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
                                       fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50) 
@@ -91,7 +97,12 @@ class FaceRecognitionAPP(tk.Frame):
         self.processed_image_show = tk.Label(self.root,text='处理图像显示区',justify=tk.LEFT,wraplength=160,fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=625, y=10)
         self.button_clear_show_image = tk.Button(self.root, text=' 清除显示 ',command=self.clear_show_image).place(x=625, y=240)
         self.button_save_show_image = tk.Button(self.root, text=' 保存显示 ',command=self.save_show_image).place(x=705, y=240)
-        # self.button_multi_face_keypoints_detection = tk.Button(self.root, text=' 多人关键点检测',command=self.command_multi_face_keypoints_detection).place(x=5, y=240)
+        self.dropdown_box_multi_keypoints_show = ttk.Combobox(self.root, values=['面部轮廓','面部网格','面部线性'], state='readonly', width=10)
+        self.dropdown_box_multi_keypoints_show.current(0),self.dropdown_box_multi_keypoints_show.place(x=625,y=280)
+        self.dropdown_box_multi_keypoints_show.bind("<<ComboboxSelected>>", self.toggle_show_multi_keypoints)
+        self.dropdown_box_multi_dlib_face_recognize = ttk.Combobox(self.root, values=['人脸采集','特征提取','人脸识别'], state='readonly', width=10)
+        self.dropdown_box_multi_dlib_face_recognize.current(0), self.dropdown_box_multi_dlib_face_recognize.place(x=625,y=320)
+        self.dropdown_box_multi_dlib_face_recognize.bind("<<ComboboxSelected>>", self.toggle_dlib_face_recognize)
         
         self.button_face_feature_extraction = tk.Button(root, text='特征点提取', command=self.toggle_facial_feature_extraction).place(x=x0, y=y0)
         self.button_face_detection = tk.Button(root, text=' 人脸检测 ', command=self.toggle_face_detection).place(x=x0+interal_x, y=y0)
@@ -156,6 +167,21 @@ class FaceRecognitionAPP(tk.Frame):
         else: text='                  \n'*4
         self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
                                       fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+    def toggle_show_multi_keypoints(self):
+        # 显示多种人脸关键点
+        self.toggle_show_multi_keypoints_active = not self.toggle_show_multi_keypoints_active
+        if self.toggle_show_multi_keypoints_active: text='显示多种关键点:\n显示多种人脸关键点,关闭请点击“功能取消”'
+        else: text='                  \n'*4
+        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
+                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+
+    def toggle_dlib_face_recognize(self):
+        # 使用dlib人脸识别
+        self.toggle_dlib_face_recognize_active = not self.toggle_dlib_face_recognize_active
+        if self.toggle_dlib_face_recognize_active: text='人脸识别:\n使用dlib人脸识别,关闭请点击“功能取消”'
+        else: text='                  \n'*4
+        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
+                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
 
     def update_video_frame(self):
         while not self.stop_thread and self.cap.isOpened():
@@ -212,10 +238,10 @@ class FaceRecognitionAPP(tk.Frame):
                             df = pd.DataFrame(self.facial_feature_csvdata)
                             df['特征']= df['特征'].apply(lambda x: ','.join(map(str, x))) # 转换为字符串格式
                             try:
-                                origin_data = pd.read_csv('facial_feature.csv') 
-                                df.to_csv('facial_feature.csv',mode='a',header=False, index=False)
+                                origin_data = pd.read_csv('./mtcnn/facial_feature.csv') 
+                                df.to_csv('./mtcnn/facial_feature.csv',mode='a',header=False, index=False)
                             except:
-                                df.to_csv('facial_feature.csv', index=False)
+                                df.to_csv('./mtcnn/facial_feature.csv', index=False)
                                 
                             tmp_root = tk.Toplevel(self.root)
                             self.center_window(tmp_root,title='特征提取')
@@ -414,34 +440,44 @@ class FaceRecognitionAPP(tk.Frame):
                     img_rgb = cv2.resize(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB), (400,400))
                     faces_query =self.mtcnn_recognizer(Image.fromarray(img_rgb))
                     boxes,_ = self.mtcnn_recognizer.detect(img_rgb, landmarks=False)
-                    faces_database = pd.read_csv('facial_feature.csv')
-                    faces_database_features = faces_database['特征'].apply(lambda x: [float(i) for i in x.split(',')]) # 获取数据库的人脸特征
-                    faces_database_names = faces_database['姓名'] # 获取数据库的人脸姓名
+                    if os.path.exists('./mtcnn/facial_feature.csv'):
+                        faces_database = pd.read_csv('./mtcnn/facial_feature.csv')
+                        faces_database_features = faces_database['特征'].apply(lambda x: [float(i) for i in x.split(',')]) # 获取数据库的人脸特征
+                        faces_database_names = faces_database['姓名'] # 获取数据库的人脸姓名
 
-                    try:
+                        try:
+                            if faces_query is not None and boxes is not None:
+                                for face, box in zip(faces_query, boxes):
+                                    x1,y1,x2,y2 = [int(i) for i in box]
+                                    cv2.rectangle(img_rgb, (x1,y1), (x2,y2), (0,255,0), 2) # 绘制出人脸框
+                                    if self.skip_frame_num % 8 == 0: # 每8帧-跳帧处理
+                                        face = self.mtcnn(Image.fromarray(img_rgb[y1:y2,x1:x2])) # 截取人脸区域，单独重新生成face进行识别
+                                        face_query_embedding = self.resnet(face.unsqueeze(0)).detach().cpu().numpy()
+                                        # 记录每一个face_query与数据库的欧几里得距离
+                                        query_database_distance = [np.linalg.norm(face_query_embedding-feature) for feature in faces_database_features]
+                                        min_index = np.argmin(query_database_distance)
+                                        cv2.rectangle(img_rgb, (x1,y1), (x2,y2), (0,255,0), 2) # 绘制出匹配到的人脸框
+                                        img_rgb_plusname = Image.fromarray(img_rgb)
+                                        self.face_recognized_name = faces_database_names[min_index]
+
+                                        if query_database_distance[min_index] < 0.8:
+                                            ImageDraw.Draw(img_rgb_plusname).text((x1, y1 - 20), faces_database_names[min_index], font=self.font, fill=(0, 255,0)) # 绘制出匹配到的人脸姓名
+                                        else:
+                                            ImageDraw.Draw(img_rgb_plusname).text((x1, y1 - 20), '未知', font=self.font, fill=(0, 255, 0)) # 绘制出匹配不到人脸姓名
+                                    else:
+                                        img_rgb_plusname = Image.fromarray(img_rgb)
+                                        ImageDraw.Draw(img_rgb_plusname).text((x1, y1-20), self.face_recognized_name, font=self.font, fill=(0, 255,0))
+                                img = ImageTk.PhotoImage(image=img_rgb_plusname)
+                                self.video_label.config(image=img)
+                                self.video_label.image = img   
+                        except: pass
+                    else:
                         if faces_query is not None and boxes is not None:
                             for face, box in zip(faces_query, boxes):
                                 x1,y1,x2,y2 = [int(i) for i in box]
                                 cv2.rectangle(img_rgb, (x1,y1), (x2,y2), (0,255,0), 2) # 绘制出人脸框
-                                if self.skip_frame_num % 8 == 0: # 每8帧-跳帧处理
-                                    face = self.mtcnn(Image.fromarray(img_rgb[y1:y2,x1:x2])) # 截取人脸区域，单独重新生成face进行识别
-                                    face_query_embedding = self.resnet(face.unsqueeze(0)).detach().cpu().numpy()
-                                    # 记录每一个face_query与数据库的欧几里得距离
-                                    query_database_distance = [np.linalg.norm(face_query_embedding-feature) for feature in faces_database_features]
-                                    min_index = np.argmin(query_database_distance)
-                                    print(f'----query database distance: {query_database_distance}\n----min index name: {faces_database_names[min_index]}')
-                                    cv2.rectangle(img_rgb, (x1,y1), (x2,y2), (0,255,0), 2) # 绘制出匹配到的人脸框
-                                    img_rgb_plusname = Image.fromarray(img_rgb)
-                                    self.face_recognized_name = faces_database_names[min_index]
-
-                                    font = ImageFont.truetype(r'font/联想小新潮酷体.ttf', 18, encoding="utf-8")
-                                    if query_database_distance[min_index] < 0.8:
-                                        ImageDraw.Draw(img_rgb_plusname).text((x1, y1 - 20), faces_database_names[min_index], font=font, fill=(0, 255,0)) # 绘制出匹配到的人脸姓名
-                                    else:
-                                        ImageDraw.Draw(img_rgb_plusname).text((x1, y1 - 20), '未知', font=font, fill=(0, 0, 255)) # 绘制出匹配不到人脸姓名
-                                else:
-                                    img_rgb_plusname = Image.fromarray(img_rgb)
-                                    ImageDraw.Draw(img_rgb_plusname).text((x1, y1-20), self.face_recognized_name, font=font, fill=(0, 255,0))
+                                img_rgb_plusname = Image.fromarray(img_rgb)
+                                ImageDraw.Draw(img_rgb_plusname).text((x1, y1 - 20), '未知', font=self.font, fill=(0, 255, 0)) # 绘制出匹配不到人脸姓名
                             img = ImageTk.PhotoImage(image=img_rgb_plusname)
                             self.video_label.config(image=img)
                             self.video_label.image = img   
@@ -451,7 +487,11 @@ class FaceRecognitionAPP(tk.Frame):
                             img = ImageTk.PhotoImage(image=img)
                             self.video_label.config(image=img)
                             self.video_label.image = img  
-                    except: pass
+
+                # # 9. 多种人脸特征显示
+                # if self.toggle_show_multi_keypoints_active:
+                #     img_rgb = cv2.resize(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB), (400,400))
+                #     face_detection_results = self.face_mesh.process(img_rgb)
                     
                 # 8.常规播放实时视频
                 else:
