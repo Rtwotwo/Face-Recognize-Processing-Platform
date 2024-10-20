@@ -51,8 +51,8 @@ class FaceRecognitionAPP(tk.Frame):
         self.toggle_face_alignment_crop_image_active = False  # 控制是否进行对齐、裁剪出人脸
         self.toggle_face_liveness_detection_active = False  # 控制是否进行活体检测
         self.face_recognition_active = False  # 控制是否进行人脸识别
-        # self.toggle_show_multi_keypoints_active = False  # 控制是否显示多种人脸关键点
-        # self.toggle_dlib_face_recognize_active = False  # 控制是否使用dlib人脸识别
+        self.toggle_show_multi_keypoints_active = False  # 控制是否显示多种人脸关键点
+        self.toggle_dlib_face_recognize_active = False  # 控制是否使用dlib人脸识别
         self.skip_frame_num , self.face_recognized_name= 0, ''  # 控制跳帧数
         self.eye_count_framenum,self.mouth_count_framenum, self.eye_num,self.mouth_num= 0,0,0,0
         self.facial_feature_extraction_name,self.face_embedding = [],[]
