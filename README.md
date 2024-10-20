@@ -4,7 +4,7 @@ This software is mainly used to bring facial recognition feature point recogniti
 ## 1.Environmental preparation
 |---|---|---|---|
 | name| version | name| version |
-| numpy|124.3 | dlib | 19.24.6 |
+| numpy| 124.3 | dlib | 19.24.6 |
 | opencv-python|  4.9.0.80| facenet-pytorch| 2.6.0 |
 |pillow|10.2.0|mediapipe|0.10.14|
 |imutils|0.5.4|pandas|2.2.2|
