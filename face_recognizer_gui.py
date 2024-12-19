@@ -95,14 +95,17 @@ class FaceRecognitionAPP(tk.Frame):
         self.alignment_button = tk.Button(self.root, text=' 对齐/裁剪',command=self.toggle_face_alignment_crop_image).place(x=105, y=240) 
         self.message_label = tk.Label(self.root,text='功能信息显示区',justify=tk.LEFT,wraplength=160,fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=10)  
         self.processed_image_show = tk.Label(self.root,text='处理图像显示区',justify=tk.LEFT,wraplength=160,fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=625, y=10)
-        self.button_clear_show_image = tk.Button(self.root, text=' 清除显示 ',command=self.clear_show_image).place(x=625, y=240)
-        self.button_save_show_image = tk.Button(self.root, text=' 保存显示 ',command=self.save_show_image).place(x=705, y=240)
-        self.dropdown_box_multi_keypoints_show = ttk.Combobox(self.root, values=['面部轮廓','面部网格','面部线性'], state='readonly', width=10)
-        self.dropdown_box_multi_keypoints_show.current(0),self.dropdown_box_multi_keypoints_show.place(x=625,y=280)
+        self.button_clear_show_image = tk.Button(self.root, text=' 清除显示  ',command=self.clear_show_image).place(x=625, y=240)
+        self.button_save_show_image = tk.Button(self.root, text=' 保存显示  ',command=self.save_show_image).place(x=705, y=240)
+        self.dropdown_box_multi_keypoints_show = ttk.Combobox(self.root, values=['面部轮廓','面部网格','面部线性'], state='readonly', width=7, height=10)
+        self.dropdown_box_multi_keypoints_show.current(0),self.dropdown_box_multi_keypoints_show.place(x=705,y=280)
         self.dropdown_box_multi_keypoints_show.bind("<<ComboboxSelected>>", self.toggle_show_multi_keypoints)
-        self.dropdown_box_multi_dlib_face_recognize = ttk.Combobox(self.root, values=['人脸采集','特征提取','人脸识别'], state='readonly', width=10)
-        self.dropdown_box_multi_dlib_face_recognize.current(0), self.dropdown_box_multi_dlib_face_recognize.place(x=625,y=320)
+        self.button_multi_keypoints_show = tk.Button(self.root, text=' 显示/关闭 ',command=self.toggle_show_multi_keypoints).place(x=625, y=280)
+        
+        self.dropdown_box_multi_dlib_face_recognize = ttk.Combobox(self.root, values=['人脸采集','特征提取','人脸识别'], state='readonly', width=7, height=10)
+        self.dropdown_box_multi_dlib_face_recognize.current(0), self.dropdown_box_multi_dlib_face_recognize.place(x=705,y=320)
         self.dropdown_box_multi_dlib_face_recognize.bind("<<ComboboxSelected>>", self.toggle_dlib_face_recognize)
+        self.button_multi_keypoints_show = tk.Button(self.root, text=' 显示/关闭 ',command=self.toggle_dlib_face_recognize).place(x=625, y=320)
         
         self.button_face_feature_extraction = tk.Button(root, text='特征点提取', command=self.toggle_facial_feature_extraction).place(x=x0, y=y0)
         self.button_face_detection = tk.Button(root, text=' 人脸检测 ', command=self.toggle_face_detection).place(x=x0+interal_x, y=y0)
@@ -187,7 +190,7 @@ class FaceRecognitionAPP(tk.Frame):
         while not self.stop_thread and self.cap.isOpened():
             ret, self.frame = self.cap.read()
             if ret:
-                self.frame = cv2.resize(self.frame, (400, 400))
+                self.frame = cv2.flip(cv2.resize(self.frame, (400, 400)), 1)
                 
                 # 1. command_facial_feature_extraction--人脸特征点提取
                 if self.facial_feature_extraction_active:        
@@ -210,8 +213,8 @@ class FaceRecognitionAPP(tk.Frame):
 
                     if box is not None and one_face_in_center:
                         try: 
-                            img = ImageTk.PhotoImage(image=img)
-                            self.video_label.config(image=img)
+                            img = ImageTk.PhotoImage( image=img )
+                            self.video_label.config( image=img )
                             self.video_label.image = img
                             # 创建临时操作界面
                             tmp_root = tk.Toplevel(self.root)
@@ -219,7 +222,7 @@ class FaceRecognitionAPP(tk.Frame):
                             entry = tk.Entry(tmp_root);entry.pack()
                             def get_entry_text():
                                 self.facial_feature_extraction_name,self.face_embedding = [],[] #清空每一循环的数据
-                                self.facial_feature_extraction_name.append(entry.get())
+                                self.facial_feature_extraction_name.append( entry.get() )
                                 tmp_root.destroy()
                             tmp_button = tk.Button(tmp_root, text='获取姓名', command=get_entry_text).pack()
                             self.root.wait_window(tmp_root) # 等待用户输入
@@ -228,8 +231,8 @@ class FaceRecognitionAPP(tk.Frame):
                             face= self.mtcnn(img_rgb[y1:y2, x1:x2]) # 裁剪出人脸,以便提取特征
                             img_show = Image.fromarray( cv2.resize(img_rgb[y1:y2, x1:x2], (160, 160)) )
                             img_show.save(f'./facebase/{self.facial_feature_extraction_name[-1]}.png') # 保存图片
-                            img_show = ImageTk.PhotoImage(image=img_show)
-                            self.processed_image_label.config(image=img_show)
+                            img_show = ImageTk.PhotoImage( image=img_show )
+                            self.processed_image_label.config( image=img_show )
                             self.processed_image_label.image = img_show
 
                             # 提取特征
@@ -238,10 +241,10 @@ class FaceRecognitionAPP(tk.Frame):
                             df = pd.DataFrame(self.facial_feature_csvdata)
                             df['特征']= df['特征'].apply(lambda x: ','.join(map(str, x))) # 转换为字符串格式
                             try:
-                                origin_data = pd.read_csv('./mtcnn/facial_feature.csv') 
-                                df.to_csv('./mtcnn/facial_feature.csv',mode='a',header=False, index=False)
+                                origin_data = pd.read_csv('./mtcnn_feature/facial_feature.csv') 
+                                df.to_csv('./mtcnn_feature/facial_feature.csv',mode='a',header=False, index=False)
                             except:
-                                df.to_csv('./mtcnn/facial_feature.csv', index=False)
+                                df.to_csv('./mtcnn_feature/facial_feature.csv', index=False)
                                 
                             tmp_root = tk.Toplevel(self.root)
                             self.center_window(tmp_root,title='特征提取')
@@ -440,8 +443,8 @@ class FaceRecognitionAPP(tk.Frame):
                     img_rgb = cv2.resize(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB), (400,400))
                     faces_query =self.mtcnn_recognizer(Image.fromarray(img_rgb))
                     boxes,_ = self.mtcnn_recognizer.detect(img_rgb, landmarks=False)
-                    if os.path.exists('./mtcnn/facial_feature.csv'):
-                        faces_database = pd.read_csv('./mtcnn/facial_feature.csv')
+                    if os.path.exists('./mtcnn_feature/facial_feature.csv'):
+                        faces_database = pd.read_csv('./mtcnn_feature/facial_feature.csv')
                         faces_database_features = faces_database['特征'].apply(lambda x: [float(i) for i in x.split(',')]) # 获取数据库的人脸特征
                         faces_database_names = faces_database['姓名'] # 获取数据库的人脸姓名
 
