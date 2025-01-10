@@ -3,7 +3,7 @@
     人脸关键点检测、人脸对齐、活体检测（眨眼、张嘴、转头等操作）
     人脸特征提取、人脸识别等功能、GUI界面,
     要求每个功能可在画面进行实时展示的关闭
-时间: 2024/09/27 - 2024/10/03
+时间: 2024/11/23 - 2024/12/15
 作者: Redal
 """
 import os
@@ -16,6 +16,7 @@ import queue, math
 import threading
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 from facenet_pytorch import MTCNN, InceptionResnetV1
+from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
 
 import dlib
@@ -27,12 +28,14 @@ import mediapipe as mp
 class FaceRecognitionAPP(tk.Frame):
     def __init__(self, root=None):
         # 初始化GUI界面参数
-        super().__init__(root)
+        super().__init__()
         self.root = root
         self.pack()
         self.frame = None
         self.root.title('人脸识别处理平台-Redal')
         self.root.geometry('800x400')
+        self.create_buttons()
+
         self.cap = cv2.VideoCapture(0)
         self.frame_queue = queue.Queue(maxsize=10)
         self.video_label = tk.Label(self)
@@ -54,14 +57,17 @@ class FaceRecognitionAPP(tk.Frame):
         self.toggle_show_multi_keypoints_active = False  # 控制是否显示多种人脸关键点
         self.toggle_dlib_face_recognize_active = False  # 控制是否使用dlib人脸识别
         self.skip_frame_num , self.face_recognized_name= 0, ''  # 控制跳帧数
-        self.eye_count_framenum,self.mouth_count_framenum, self.eye_num,self.mouth_num= 0,0,0,0
+        self.internal_x, self.internal_y = 0, 0
+        self.internal_w, self.internal_h = 0, 0
+        self.eye_count_framenum,self.mouth_count_framenum, self.head_count_framenum, self.eye_num,self.mouth_num, self.head_num= 0,0,0,0,0,0
         self.facial_feature_extraction_name,self.face_embedding = [],[]
         self.facial_feature_csvdata = {}
         
         self.thread = threading.Thread(target=self.update_video_frame)
         self.thread.daemon = True
         self.thread.start()
-        self.predictor = dlib.shape_predictor(r".\model\shape_predictor_68_face_landmarks.dat")
+        self.predictor = dlib.shape_predictor(r".\models\shape_predictor_68_face_landmarks.dat")
+        self.face_recmodel = dlib.face_recognition_model_v1(r".\models\dlib_face_recognition_resnet_model_v1.dat")
         self.detector = dlib.get_frontal_face_detector()
         # 初始化 MediaPipe 的人脸检测和面部地标检测器
         self.mp_face_detection = mp.solutions.face_detection
@@ -88,103 +94,94 @@ class FaceRecognitionAPP(tk.Frame):
             self.face_recognition_active = False
             self.toggle_show_multi_keypoints_active = False
             self.toggle_dlib_face_recognize_active = False
-            text='                   \n'*4
-            self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50) 
-        self.button_common_video_play = tk.Button(root, text=' 功能取消  ',command=command_cancel_function).place(x=25, y=240)
+            self.message_label.config(text='功能信息显示区')
+        self.button_common_video_play = tk.Button(self.root, text=' 功能取消  ',command=command_cancel_function).place(x=25, y=240)
         self.alignment_button = tk.Button(self.root, text=' 对齐/裁剪',command=self.toggle_face_alignment_crop_image).place(x=105, y=240) 
-        self.message_label = tk.Label(self.root,text='功能信息显示区',justify=tk.LEFT,wraplength=160,fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=10)  
+        self.message_label = tk.Label(self.root,text='功能信息显示区',justify=tk.LEFT,wraplength=160,fg='black',font=('仿宋',14,'bold'),padx=5,pady=10)
+        self.message_label.place(x=25, y=10)  
         self.processed_image_show = tk.Label(self.root,text='处理图像显示区',justify=tk.LEFT,wraplength=160,fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=625, y=10)
         self.button_clear_show_image = tk.Button(self.root, text=' 清除显示  ',command=self.clear_show_image).place(x=625, y=240)
         self.button_save_show_image = tk.Button(self.root, text=' 保存显示  ',command=self.save_show_image).place(x=705, y=240)
-        self.dropdown_box_multi_keypoints_show = ttk.Combobox(self.root, values=['面部轮廓','面部网格','面部线性'], state='readonly', width=7, height=10)
-        self.dropdown_box_multi_keypoints_show.current(0),self.dropdown_box_multi_keypoints_show.place(x=705,y=280)
-        self.dropdown_box_multi_keypoints_show.bind("<<ComboboxSelected>>", self.toggle_show_multi_keypoints)
-        self.button_multi_keypoints_show = tk.Button(self.root, text=' 显示/关闭 ',command=self.toggle_show_multi_keypoints).place(x=625, y=280)
+
+        # self.dropdown_box_multi_keypoints_show = ttk.Combobox(self.root, values=['面部轮廓','面部网格','面部线性'], state='readonly', width=7, height=10)
+        # self.dropdown_box_multi_keypoints_show.current(0),self.dropdown_box_multi_keypoints_show.place(x=705,y=280)
+        # self.dropdown_box_multi_keypoints_show.bind("<<ComboboxSelected>>", self.toggle_show_multi_keypoints)
+        # self.button_multi_keypoints_show = tk.Button(self.root, text=' 显示/关闭 ',command=self.toggle_show_multi_keypoints).place(x=625, y=280)
         
-        self.dropdown_box_multi_dlib_face_recognize = ttk.Combobox(self.root, values=['人脸采集','特征提取','人脸识别'], state='readonly', width=7, height=10)
-        self.dropdown_box_multi_dlib_face_recognize.current(0), self.dropdown_box_multi_dlib_face_recognize.place(x=705,y=320)
-        self.dropdown_box_multi_dlib_face_recognize.bind("<<ComboboxSelected>>", self.toggle_dlib_face_recognize)
-        self.button_multi_keypoints_show = tk.Button(self.root, text=' 显示/关闭 ',command=self.toggle_dlib_face_recognize).place(x=625, y=320)
+        # self.dropdown_box_multi_dlib_face_recognize = ttk.Combobox(self.root, values=['人脸采集','特征提取','人脸识别'], state='readonly', width=7, height=10)
+        # self.dropdown_box_multi_dlib_face_recognize.current(0), self.dropdown_box_multi_dlib_face_recognize.place(x=705,y=320)
+        # self.dropdown_box_multi_dlib_face_recognize.bind("<<ComboboxSelected>>", self.toggle_dlib_face_recognize)
+        # self.button_multi_keypoints_show = tk.Button(self.root, text=' 显示/关闭 ',command=self.toggle_dlib_face_recognize).place(x=625, y=320)
         
-        self.button_face_feature_extraction = tk.Button(root, text='特征点提取', command=self.toggle_facial_feature_extraction).place(x=x0, y=y0)
-        self.button_face_detection = tk.Button(root, text=' 人脸检测 ', command=self.toggle_face_detection).place(x=x0+interal_x, y=y0)
-        self.button_face_keypoints_detection = tk.Button(root, text='关键点检测', command=self.toggle_face_keypoints_detection).place(x=x0, y=y0+interal_y)
-        self.button_face_alignment = tk.Button(root, text=' 对齐显示 ', command=self.toggle_face_alignment).place(x=x0+interal_x, y=y0+interal_y)
-        self.button_face_liveness_detection = tk.Button(root, text=' 活体检测  ', command=self.toggle_face_liveness_detection).place(x=x0, y=y0+interal_y*2)
-        self.button_face_recognition = tk.Button(root, text=' 人脸识别 ', command=self.toggle_face_recognition).place(x=x0+interal_x, y=y0+interal_y*2) 
+        self.button_face_feature_extraction = tk.Button(self.root, text='特征点提取', command=self.toggle_facial_feature_extraction).place(x=x0, y=y0)
+        self.button_face_detection = tk.Button(self.root, text=' 人脸检测 ', command=self.toggle_face_detection).place(x=x0+interal_x, y=y0)
+        self.button_face_keypoints_detection = tk.Button(self.root, text='关键点检测', command=self.toggle_face_keypoints_detection).place(x=x0, y=y0+interal_y)
+        self.button_face_alignment = tk.Button(self.root, text=' 对齐显示 ', command=self.toggle_face_alignment).place(x=x0+interal_x, y=y0+interal_y)
+        self.button_face_liveness_detection = tk.Button(self.root, text=' 活体检测  ', command=self.toggle_face_liveness_detection).place(x=x0, y=y0+interal_y*2)
+        self.button_face_recognition = tk.Button(self.root, text=' 人脸识别 ', command=self.toggle_face_recognition).place(x=x0+interal_x, y=y0+interal_y*2) 
 
     def toggle_facial_feature_extraction(self): 
         # 控制人脸特征提取开关-self.facial_feature_extraction_active
         self.facial_feature_extraction_active = not self.facial_feature_extraction_active
         if self.facial_feature_extraction_active: text='特征提取:\n请将面部居中并保持独处于画面'
-        else: text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50) 
+        else: text='功能信息显示区'
+        self.message_label.config(text=text)
         
     def toggle_face_detection(self):
         # 控制人脸检测开关-self.face_detection_active
         self.face_detection_active = not self.face_detection_active
         if self.face_detection_active: text='人脸检测:\n可实时检测画面中的多张人脸'  
-        else: text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50) 
+        else: text='功能信息显示区'
+        self.message_label.config(text=text) 
         
     def toggle_face_keypoints_detection(self):
         # 控制人脸关键点检测开关-self.face_keypoints_detection_active
         self.face_keypoints_detection_active = not self.face_keypoints_detection_active
         if self.face_keypoints_detection_active: text='关键点检测:\n可实时显示画面中的人脸关键点'  
-        else: text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+        else: text='功能信息显示区'
+        self.message_label.config(text=text)
          
     def toggle_face_alignment(self):
         # 进行对齐显示
         self.face_alignment_active = not self.face_alignment_active
         if self.face_alignment_active: text='对齐显示:\n检测任意倾斜角度的面部绘制边界框'
-        elif self.face_alignment_active == False: text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+        elif self.face_alignment_active == False: text='功能信息显示区'
+        self.message_label.config(text=text)
 
     def toggle_face_alignment_crop_image(self):
         # 进行人脸对齐、裁剪出人脸
         self.toggle_face_alignment_crop_image_active = not self.toggle_face_alignment_crop_image_active
         if self.toggle_face_alignment_crop_image_active:text='对齐裁剪:\n将人脸对齐并裁剪出人脸'
-        else:text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+        else: text='功能信息显示区'
+        self.message_label.config(text=text)
 
     def toggle_face_liveness_detection(self):
         # 进行活体检测
         self.toggle_face_liveness_detection_active = not self.toggle_face_liveness_detection_active
         if self.toggle_face_liveness_detection_active: text='活体检测:\n实时检测画面中人脸是否为活体'
-        else: text='                  \n'*4
-        self.eye_count_framenum,self.mouth_count_framenum, self.eye_num,self.mouth_num= 0,0,0,0 # 重置眼部、嘴部(帧数)计数器
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place()
+        else: text='功能信息显示区'
+        self.eye_count_framenum,self.mouth_count_framenum, self.head_count_framenum,self.eye_num,self.mouth_num, self.head_num= 0,0,0,0,0,0 # 重置眼部、嘴部(帧数)计数器
+        self.message_label.config(text=text)
         
     def toggle_face_recognition(self):
         # 进行人脸识别
         self.face_recognition_active = not self.face_recognition_active
         if self.face_recognition_active: text='人脸识别:\n可识别画面中的人脸'
-        else: text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+        else: text='功能信息显示区'
+        self.message_label.config(text=text)
     def toggle_show_multi_keypoints(self):
         # 显示多种人脸关键点
         self.toggle_show_multi_keypoints_active = not self.toggle_show_multi_keypoints_active
         if self.toggle_show_multi_keypoints_active: text='显示多种关键点:\n显示多种人脸关键点,关闭请点击“功能取消”'
-        else: text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+        else: text='功能信息显示区'
+        self.message_label.config(text=text)
 
     def toggle_dlib_face_recognize(self):
         # 使用dlib人脸识别
         self.toggle_dlib_face_recognize_active = not self.toggle_dlib_face_recognize_active
         if self.toggle_dlib_face_recognize_active: text='人脸识别:\n使用dlib人脸识别,关闭请点击“功能取消”'
-        else: text='                  \n'*4
-        self.message_label = tk.Label(self.root,text=text,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+        else: text='功能信息显示区'
+        self.message_label.config(text=text)
 
     def update_video_frame(self):
         while not self.stop_thread and self.cap.isOpened():
@@ -212,47 +209,50 @@ class FaceRecognitionAPP(tk.Frame):
                     box, _ = self.mtcnn.detect(img_rgb, landmarks=False) # 已经确保画面中仅有一人
 
                     if box is not None and one_face_in_center:
-                        try: 
-                            img = ImageTk.PhotoImage( image=img )
-                            self.video_label.config( image=img )
-                            self.video_label.image = img
-                            # 创建临时操作界面
-                            tmp_root = tk.Toplevel(self.root)
-                            self.center_window(tmp_root,title='特征提取')
-                            entry = tk.Entry(tmp_root);entry.pack()
-                            def get_entry_text():
-                                self.facial_feature_extraction_name,self.face_embedding = [],[] #清空每一循环的数据
-                                self.facial_feature_extraction_name.append( entry.get() )
-                                tmp_root.destroy()
-                            tmp_button = tk.Button(tmp_root, text='获取姓名', command=get_entry_text).pack()
-                            self.root.wait_window(tmp_root) # 等待用户输入
-                            # 将裁剪出的人脸显示出来
-                            x1, y1, x2, y2 = [int(i) for i in box[0]]
-                            face= self.mtcnn(img_rgb[y1:y2, x1:x2]) # 裁剪出人脸,以便提取特征
-                            img_show = Image.fromarray( cv2.resize(img_rgb[y1:y2, x1:x2], (160, 160)) )
-                            img_show.save(f'./facebase/{self.facial_feature_extraction_name[-1]}.png') # 保存图片
-                            img_show = ImageTk.PhotoImage( image=img_show )
-                            self.processed_image_label.config( image=img_show )
-                            self.processed_image_label.image = img_show
+                        # try: 
+                        img = ImageTk.PhotoImage( image=img )
+                        self.video_label.config( image=img )
+                        self.video_label.image = img
+                        # 创建临时操作界面
+                        tmp_root = tk.Toplevel(self.root)
+                        self.center_window(tmp_root,title='特征提取')
+                        entry = tk.Entry(tmp_root);entry.pack()
+                        def get_entry_text():
+                            self.facial_feature_extraction_name,self.face_embedding = [],[] #清空每一循环的数据
+                            self.facial_feature_extraction_name.append( entry.get() )
+                            tmp_root.destroy()
+                        tmp_button = tk.Button(tmp_root, text='获取姓名', command=get_entry_text).pack()
+                        self.root.wait_window(tmp_root) # 等待用户输入
+                        # 将裁剪出的人脸显示出来
+                        x1, y1, x2, y2 = [int(i) for i in box[0]]
+                        face= self.mtcnn(img_rgb[y1:y2, x1:x2]) # 裁剪出人脸,以便提取特征
+                        img_show = Image.fromarray( cv2.resize(img_rgb[y1:y2, x1:x2], (160, 160)) )
+                        img_show.save(f'./facebase/{self.facial_feature_extraction_name[-1]}.png') # 保存图片
+                        img_show = ImageTk.PhotoImage( image=img_show )
+                        self.processed_image_label.config( image=img_show )
+                        self.processed_image_label.image = img_show
 
-                            # 提取特征
-                            self.face_embedding.append(self.resnet(face.unsqueeze(0)).detach().numpy().flatten().tolist())
-                            self.facial_feature_csvdata= {'姓名': self.facial_feature_extraction_name, '特征': self.face_embedding}
-                            df = pd.DataFrame(self.facial_feature_csvdata)
-                            df['特征']= df['特征'].apply(lambda x: ','.join(map(str, x))) # 转换为字符串格式
-                            try:
-                                origin_data = pd.read_csv('./mtcnn_feature/facial_feature.csv') 
-                                df.to_csv('./mtcnn_feature/facial_feature.csv',mode='a',header=False, index=False)
-                            except:
-                                df.to_csv('./mtcnn_feature/facial_feature.csv', index=False)
-                                
-                            tmp_root = tk.Toplevel(self.root)
-                            self.center_window(tmp_root,title='特征提取')
-                            message = tk.Message(tmp_root, text=self.facial_feature_extraction_name[-1]+'-特征提取成功',width=150).pack()
-                            tmp_button = tk.Button(tmp_root, text='关闭', command=lambda:tmp_root.destroy()).pack()
-                            tmp_root.wait_window(tmp_root) # 等待用户关闭
-                            self.toggle_facial_feature_extraction()
-                        except: pass
+                        # 提取特征
+                        # dlib_faces = self.detector(img_rgb, 1)
+                        # shape = self.predictor(img_rgb, dlib_faces[0])
+                        # self.face_embedding.append(np.array(self.face_recmodel.compute_face_descriptor(img_rgb, shape)))
+                        self.face_embedding.append(self.resnet(face.unsqueeze(0)).detach().numpy().flatten().tolist())
+                        self.facial_feature_csvdata= {'姓名': self.facial_feature_extraction_name, '特征': self.face_embedding}
+                        df = pd.DataFrame(self.facial_feature_csvdata)
+                        df['特征']= df['特征'].apply(lambda x: ','.join(map(str, x))) # 转换为字符串格式
+                        try:
+                            origin_data = pd.read_csv('./mtcnn_feature/facial_feature.csv') 
+                            df.to_csv('./mtcnn_feature/facial_feature.csv',mode='a',header=False, index=False)
+                        except:
+                            df.to_csv('./mtcnn_feature/facial_feature.csv', index=False)
+                            
+                        tmp_root = tk.Toplevel(self.root)
+                        self.center_window(tmp_root,title='特征提取')
+                        message = tk.Message(tmp_root, text=self.facial_feature_extraction_name[-1]+'-特征提取成功',width=150).pack()
+                        tmp_button = tk.Button(tmp_root, text='关闭', command=lambda:tmp_root.destroy()).pack()
+                        tmp_root.wait_window(tmp_root) # 等待用户关闭
+                        self.toggle_facial_feature_extraction()
+                        # except: pass
                     else:
                         img = cv2.resize(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB),(400,400))
                         cv2.circle(img, (200, 200), 150, (255, 100, 0), 2) # 绘制特征提取界限区域
@@ -403,24 +403,30 @@ class FaceRecognitionAPP(tk.Frame):
                             left_eye = np.array([[DEs[159].x*w, DEs[159].y*h],[DEs[133].x*w, DEs[133].y*h],[DEs[145].x*w, DEs[145].y*h],[DEs[33].x*w, DEs[33].y*h]],dtype=np.int32)
                             right_eye = np.array([[DEs[386].x*w, DEs[386].y*h],[DEs[263].x*w, DEs[263].y*h],[DEs[374].x*w, DEs[374].y*h],[DEs[463].x*w, DEs[463].y*h]],dtype=np.int32)
                             middle_mouth = np.array([[DEs[13].x*w, DEs[13].y*h],[DEs[308].x*w, DEs[308].y*h],[DEs[14].x*w, DEs[14].y*h],[DEs[78].x*w, DEs[78].y*h]],dtype=np.int32)
-                            left_eye_ratio, right_eye_ratio, mouth_ratio = self.liveness_compute_ratio(left_eye, right_eye, middle_mouth)
+                            face_four_points = np.array([[DEs[54].x*w, DEs[54].y*h],[DEs[284].x*w, DEs[284].y*h], [DEs[365].x*w, DEs[365].y*h], [DEs[136].x*w, DEs[136].y*h]],dtype=np.int32)
+                            left_eye_ratio, right_eye_ratio, mouth_ratio , head_ratio = self.liveness_compute_ratio(left_eye, right_eye, middle_mouth, face_four_points)
                             cv2.polylines(img_rgb, [left_eye], isClosed=True, color=(0, 255, 0), thickness=2) # 绘制出来便于检测
                             cv2.polylines(img_rgb, [right_eye], isClosed=True, color=(0, 255, 0), thickness=2)
                             cv2.polylines(img_rgb, [middle_mouth], isClosed=True, color=(0, 255, 0), thickness=2)
+                            cv2.polylines(img_rgb, [face_four_points], isClosed=True, color=(0, 255, 0), thickness=2)
+                            print(head_ratio)
 
                             if self.eye_num < 4:
-                                print(f'Eye ratio Left is {left_eye_ratio} and Right is {right_eye_ratio}')
-                                self.message_label = tk.Label(self.root,text='活体检测:\n实时检测画面中人脸是否为活体\n请眨眨眼三次:'+str(self.eye_num),justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+                                # print(f'Eye ratio Left is {left_eye_ratio} and Right is {right_eye_ratio}')
+                                self.message_label.config(text='活体检测:\n实时检测画面中人脸是否为活体\n请眨眨眼四次:'+str(self.eye_num))
                                 flag = False # 判断过程是否连续
                                 if (left_eye_ratio < 0.15 and right_eye_ratio < 0.15) : self.eye_count_framenum += 1  
                                 elif (left_eye_ratio > 0.2 and right_eye_ratio > 0.2) and self.eye_count_framenum >= 2: self.eye_num += 1;self.eye_count_framenum = 0
+
+                            if self.eye_num >= 4 and self.head_num < 4:
+                                if head_ratio < 0.75 : self.head_count_framenum += 1
+                                elif head_ratio > 0.8 and self.head_count_framenum >= 2: self.head_num += 1;self.head_count_framenum = 0
+                                self.message_label.config(text='活体检测:\n实时检测画面中人脸是否为活体\n请转头四次:'+str(self.head_num))
                                 
-                            if  self.eye_num >= 4 and self.mouth_num < 4:
+                            if  self.head_num >= 4 and self.mouth_num < 4:
                                 if mouth_ratio > 0.5 : self.mouth_count_framenum += 1
                                 elif mouth_ratio < 0.2 and self.mouth_count_framenum >= 2: self.mouth_num += 1;self.mouth_count_framenum = 0
-                                self.message_label = tk.Label(self.root,text='活体检测:\n实时检测画面中人脸是否为活体\n请张闭口三次:'+str(self.mouth_num),justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+                                self.message_label.config(text='活体检测:\n实时检测画面中人脸是否为活体\n请张闭口四次:'+str(self.mouth_num))
                                 
                             if self.mouth_num >= 4:
                                 tmp_root = tk.Toplevel(self.root)
@@ -428,8 +434,7 @@ class FaceRecognitionAPP(tk.Frame):
                                 message = tk.Message(tmp_root, text='状态一切正常',width=150).pack()
                                 tmp_button = tk.Button(tmp_root, text='关闭', command=lambda:tmp_root.destroy()).pack()
                                 tmp_root.wait_window(tmp_root) # 等待用户关闭  
-                                self.message_label = tk.Label(self.root,text='               \n'*4,justify=tk.LEFT,wraplength=160,
-                                      fg='black',font=('仿宋',14,'bold'),padx=5,pady=10).place(x=25, y=50)
+                                self.message_label.config(text='功能信息显示区')
                                 self.toggle_face_liveness_detection() # 关闭活体检测功能
                         img = Image.fromarray(img_rgb)
                         img = ImageTk.PhotoImage(image=img)
@@ -447,6 +452,46 @@ class FaceRecognitionAPP(tk.Frame):
                         faces_database = pd.read_csv('./mtcnn_feature/facial_feature.csv')
                         faces_database_features = faces_database['特征'].apply(lambda x: [float(i) for i in x.split(',')]) # 获取数据库的人脸特征
                         faces_database_names = faces_database['姓名'] # 获取数据库的人脸姓名
+
+                        # if self.skip_frame_num % 8 == 0:
+                        #     dlib_faces = self.detector(img_rgb, 1)
+                        #     if dlib_faces is not None :
+                        #         for face in dlib_faces:
+                        #             face_shape = self.predictor(img_rgb, face)
+                        #             face_query_embedding = np.array(self.face_recmodel.compute_face_descriptor(img_rgb, face_shape))
+                        #             # 记录每一个face_query与数据库的欧几里得距离
+                        #             query_database_distance = [np.linalg.norm(face_query_embedding-np.array(feature)) for feature in faces_database_features]
+                        #             min_index = np.argmin(query_database_distance)
+                        #             x, y = face.left(), face.top()
+                        #             w, h = face.width(), face.height()
+                        #             cv2.rectangle(img_rgb, (x,y), (x+w,y+h), (0,255,0), 2) # 绘制出人脸框
+                        #             self.internal_x, self.internal_y, self.face_recognized_name =x , y, faces_database_names[min_index] # 记录匹配到的人脸姓名
+                        #             self.internal_w, self.internal_h = w, h
+
+                        #             # 检测人像是否存在于数据库中
+                        #             if query_database_distance[min_index] < 0.6:   
+                        #                 img_rgb_plusname = Image.fromarray(img_rgb)
+                        #                 ImageDraw.Draw(img_rgb_plusname).text((x, y - 20), faces_database_names[min_index], font=self.font, fill=(0, 255,0)) # 绘制出匹配到的人脸姓名
+                        #             else:
+                        #                 img_rgb_plusname = Image.fromarray(img_rgb)
+                        #                 ImageDraw.Draw(img_rgb_plusname).text((x, y - 20), '未知', font=self.font, fill=(0, 255, 0)) # 绘制出匹配不到人脸姓名
+                        #             img = ImageTk.PhotoImage(image=img_rgb_plusname)
+                        #             self.video_label.config(image=img)
+                        #             self.video_label.image = img
+                        #     else:
+                        #         img = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
+                        #         img = Image.fromarray(img)
+                        #         img = ImageTk.PhotoImage(image=img)
+                        #         self.video_label.config(image=img)
+                        #         self.video_label.image = img  
+                        # else:
+                        #     print(self.internal_x, self.internal_y)
+                        #     cv2.rectangle(img_rgb, (self.internal_x,self.internal_y), (self.internal_x+self.internal_w,self.internal_y+self.internal_h), (0,255,0), 2)
+                        #     img_rgb_plusname = Image.fromarray(img_rgb)
+                        #     ImageDraw.Draw(img_rgb_plusname).text((self.internal_x, self.internal_y - 20), self.face_recognized_name, font=self.font, fill=(0, 255,0)) # 绘制出匹配到的人脸姓名
+                        #     img = ImageTk.PhotoImage(image=img_rgb_plusname)
+                        #     self.video_label.config(image=img)
+                        #     self.video_label.image = img
 
                         try:
                             if faces_query is not None and boxes is not None:
@@ -490,11 +535,6 @@ class FaceRecognitionAPP(tk.Frame):
                             img = ImageTk.PhotoImage(image=img)
                             self.video_label.config(image=img)
                             self.video_label.image = img  
-
-                # # 9. 多种人脸特征显示
-                # if self.toggle_show_multi_keypoints_active:
-                #     img_rgb = cv2.resize(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB), (400,400))
-                #     face_detection_results = self.face_mesh.process(img_rgb)
                     
                 # 8.常规播放实时视频
                 else:
@@ -533,21 +573,35 @@ class FaceRecognitionAPP(tk.Frame):
                 img_save.save(file_save_path)
         except : pass
     
-    def liveness_compute_ratio(self,left_eye, right_eye, mouth):
+    def liveness_compute_ratio(self,left_eye, right_eye, mouth, face_four_points):
         # 计算左眼、右眼以及口的上下-左右比率
         def ratio(points_list):
             U_D = math.sqrt((points_list[0][0]-points_list[2][0])**2 + (points_list[0][1]-points_list[2][1])**2)
             L_R = math.sqrt((points_list[1][0]-points_list[3][0])**2 + (points_list[1][1]-points_list[3][1])**2)
             return U_D/L_R
+        def turn_ratio(points_list):
+            # 计算正向人脸转向的比例
+            v_line = math.sqrt((points_list[0][0]-points_list[1][0])**2 + (points_list[0][1]-points_list[1][1])**2)
+            h_line = math.sqrt((points_list[1][0]-points_list[2][0])**2 + (points_list[1][1]-points_list[2][1])**2)
+            return v_line/h_line
+
+        head_turn_ratio = turn_ratio(face_four_points)
         left_eye_ratio = ratio(left_eye)
         right_eye_ratio = ratio(right_eye)
         mouth_ratio = ratio(mouth)
-        return left_eye_ratio, right_eye_ratio, mouth_ratio
+        return left_eye_ratio, right_eye_ratio, mouth_ratio, head_turn_ratio
+    
+    def start_video_capture(self):
+        if self.cap is None:
+            self.cap = cv2.VideoCapture(0)
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.update_frame)
+            self.thread.daemon = True
+            self.thread.start()
 
 
 """主程序"""
 if __name__ == '__main__':
     root = tk.Tk()
     app = FaceRecognitionAPP(root=root)
-    app.create_buttons()
     app.mainloop()
