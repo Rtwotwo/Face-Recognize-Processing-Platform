@@ -16,7 +16,6 @@ import queue, math
 import threading
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 from facenet_pytorch import MTCNN, InceptionResnetV1
-from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
 
 import dlib
