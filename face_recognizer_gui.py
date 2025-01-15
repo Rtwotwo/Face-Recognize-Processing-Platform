@@ -208,50 +208,50 @@ class FaceRecognitionAPP(tk.Frame):
                     box, _ = self.mtcnn.detect(img_rgb, landmarks=False) # 已经确保画面中仅有一人
 
                     if box is not None and one_face_in_center:
-                        # try: 
-                        img = ImageTk.PhotoImage( image=img )
-                        self.video_label.config( image=img )
-                        self.video_label.image = img
-                        # 创建临时操作界面
-                        tmp_root = tk.Toplevel(self.root)
-                        self.center_window(tmp_root,title='特征提取')
-                        entry = tk.Entry(tmp_root);entry.pack()
-                        def get_entry_text():
-                            self.facial_feature_extraction_name,self.face_embedding = [],[] #清空每一循环的数据
-                            self.facial_feature_extraction_name.append( entry.get() )
-                            tmp_root.destroy()
-                        tmp_button = tk.Button(tmp_root, text='获取姓名', command=get_entry_text).pack()
-                        self.root.wait_window(tmp_root) # 等待用户输入
-                        # 将裁剪出的人脸显示出来
-                        x1, y1, x2, y2 = [int(i) for i in box[0]]
-                        face= self.mtcnn(img_rgb[y1:y2, x1:x2]) # 裁剪出人脸,以便提取特征
-                        img_show = Image.fromarray( cv2.resize(img_rgb[y1:y2, x1:x2], (160, 160)) )
-                        img_show.save(f'./facebase/{self.facial_feature_extraction_name[-1]}.png') # 保存图片
-                        img_show = ImageTk.PhotoImage( image=img_show )
-                        self.processed_image_label.config( image=img_show )
-                        self.processed_image_label.image = img_show
+                        try: 
+                            img = ImageTk.PhotoImage( image=img )
+                            self.video_label.config( image=img )
+                            self.video_label.image = img
+                            # 创建临时操作界面
+                            tmp_root = tk.Toplevel(self.root)
+                            self.center_window(tmp_root,title='特征提取')
+                            entry = tk.Entry(tmp_root);entry.pack()
+                            def get_entry_text():
+                                self.facial_feature_extraction_name,self.face_embedding = [],[] #清空每一循环的数据
+                                self.facial_feature_extraction_name.append( entry.get() )
+                                tmp_root.destroy()
+                            tmp_button = tk.Button(tmp_root, text='获取姓名', command=get_entry_text).pack()
+                            self.root.wait_window(tmp_root) # 等待用户输入
+                            # 将裁剪出的人脸显示出来
+                            x1, y1, x2, y2 = [int(i) for i in box[0]]
+                            face= self.mtcnn(img_rgb[y1:y2, x1:x2]) # 裁剪出人脸,以便提取特征
+                            img_show = Image.fromarray( cv2.resize(img_rgb[y1:y2, x1:x2], (160, 160)) )
+                            img_show.save(f'./facebase/{self.facial_feature_extraction_name[-1]}.png') # 保存图片
+                            img_show = ImageTk.PhotoImage( image=img_show )
+                            self.processed_image_label.config( image=img_show )
+                            self.processed_image_label.image = img_show
 
-                        # 提取特征
-                        # dlib_faces = self.detector(img_rgb, 1)
-                        # shape = self.predictor(img_rgb, dlib_faces[0])
-                        # self.face_embedding.append(np.array(self.face_recmodel.compute_face_descriptor(img_rgb, shape)))
-                        self.face_embedding.append(self.resnet(face.unsqueeze(0)).detach().numpy().flatten().tolist())
-                        self.facial_feature_csvdata= {'姓名': self.facial_feature_extraction_name, '特征': self.face_embedding}
-                        df = pd.DataFrame(self.facial_feature_csvdata)
-                        df['特征']= df['特征'].apply(lambda x: ','.join(map(str, x))) # 转换为字符串格式
-                        try:
-                            origin_data = pd.read_csv('./mtcnn_feature/facial_feature.csv') 
-                            df.to_csv('./mtcnn_feature/facial_feature.csv',mode='a',header=False, index=False)
-                        except:
-                            df.to_csv('./mtcnn_feature/facial_feature.csv', index=False)
-                            
-                        tmp_root = tk.Toplevel(self.root)
-                        self.center_window(tmp_root,title='特征提取')
-                        message = tk.Message(tmp_root, text=self.facial_feature_extraction_name[-1]+'-特征提取成功',width=150).pack()
-                        tmp_button = tk.Button(tmp_root, text='关闭', command=lambda:tmp_root.destroy()).pack()
-                        tmp_root.wait_window(tmp_root) # 等待用户关闭
-                        self.toggle_facial_feature_extraction()
-                        # except: pass
+                            # 提取特征
+                            # dlib_faces = self.detector(img_rgb, 1)
+                            # shape = self.predictor(img_rgb, dlib_faces[0])
+                            # self.face_embedding.append(np.array(self.face_recmodel.compute_face_descriptor(img_rgb, shape)))
+                            self.face_embedding.append(self.resnet(face.unsqueeze(0)).detach().numpy().flatten().tolist())
+                            self.facial_feature_csvdata= {'姓名': self.facial_feature_extraction_name, '特征': self.face_embedding}
+                            df = pd.DataFrame(self.facial_feature_csvdata)
+                            df['特征']= df['特征'].apply(lambda x: ','.join(map(str, x))) # 转换为字符串格式
+                            try:
+                                origin_data = pd.read_csv('./mtcnn_feature/facial_feature.csv') 
+                                df.to_csv('./mtcnn_feature/facial_feature.csv',mode='a',header=False, index=False)
+                            except:
+                                df.to_csv('./mtcnn_feature/facial_feature.csv', index=False)
+                                
+                            tmp_root = tk.Toplevel(self.root)
+                            self.center_window(tmp_root,title='特征提取')
+                            message = tk.Message(tmp_root, text=self.facial_feature_extraction_name[-1]+'-特征提取成功',width=150).pack()
+                            tmp_button = tk.Button(tmp_root, text='关闭', command=lambda:tmp_root.destroy()).pack()
+                            tmp_root.wait_window(tmp_root) # 等待用户关闭
+                            self.toggle_facial_feature_extraction()
+                        except: pass
                     else:
                         img = cv2.resize(cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB),(400,400))
                         cv2.circle(img, (200, 200), 150, (255, 100, 0), 2) # 绘制特征提取界限区域
@@ -408,14 +408,14 @@ class FaceRecognitionAPP(tk.Frame):
                             cv2.polylines(img_rgb, [right_eye], isClosed=True, color=(0, 255, 0), thickness=2)
                             cv2.polylines(img_rgb, [middle_mouth], isClosed=True, color=(0, 255, 0), thickness=2)
                             cv2.polylines(img_rgb, [face_four_points], isClosed=True, color=(0, 255, 0), thickness=2)
-                            print(head_ratio)
 
                             if self.eye_num < 4:
                                 # print(f'Eye ratio Left is {left_eye_ratio} and Right is {right_eye_ratio}')
                                 self.message_label.config(text='活体检测:\n实时检测画面中人脸是否为活体\n请眨眨眼四次:'+str(self.eye_num))
                                 flag = False # 判断过程是否连续
                                 if (left_eye_ratio < 0.15 and right_eye_ratio < 0.15) : self.eye_count_framenum += 1  
-                                elif (left_eye_ratio > 0.2 and right_eye_ratio > 0.2) and self.eye_count_framenum >= 2: self.eye_num += 1;self.eye_count_framenum = 0
+                                elif (left_eye_ratio > 0.2 and right_eye_ratio > 0.2) and self.eye_count_framenum >= 2: 
+                                    self.eye_num += 1;self.eye_count_framenum = 0
 
                             if self.eye_num >= 4 and self.head_num < 4:
                                 if head_ratio < 0.75 : self.head_count_framenum += 1
