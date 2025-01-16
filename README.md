@@ -6,7 +6,7 @@ This software is mainly used to bring facial recognition feature point recogniti
 
 Python 3.X and the following libraries are required:
 
-| name          | version    | name           | version    |
+| name          | version    | name           | version   |
 |----------------|-----------|----------------|-----------|
 | numpy          | 124.3     | dlib           | 19.24.6   |
 | opencv-python  | 4.9.0.80  | facenet-pytorch| 2.6.0     |
@@ -16,8 +16,8 @@ Python 3.X and the following libraries are required:
 ## 2.fundamental functions
 
 Now, let's introduce the main functions of this software:  
-This program is a Python-based face recognition system that uses various computer vision libraries (such as OpenCV, dlib, MediaPipe, facenet_pytorch, etc.) to implement functions such as face detection, keypoint detection, face alignment, liveness detection, face feature extraction, and face recognition. The program builds a Graphical User Interface (GUI) through the Tkinter library, and users can click buttons to turn on or off different functional modules.  
-[演示视频](https://b23.tv/n5PKEK6)
+This program is a Python-based face recognition system that uses various computer vision libraries (such as OpenCV, dlib, MediaPipe, facenet_pytorch, etc.) to implement functions such as face detection, keypoint detection, face alignment, liveness detection, face feature extraction, and face recognition. The program builds a Graphical User Interface (GUI) through the Tkinter library, and users can click buttons to turn on or off different functional modules [演示视频](https://b23.tv/n5PKEK6).
+[演示视频](asserts/程序演示视频.mp4)
 
 ## 3. Usage
 
